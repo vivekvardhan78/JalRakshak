@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useComplaints } from '../hooks/useRealTimeData';
 import { 
   Plus, 
   Send, 
@@ -29,6 +30,9 @@ interface MobileAppProps {
 }
 
 export function MobileApp({ sensorData }: MobileAppProps) {
+  // Use real-time complaints data
+  const { complaints: realTimeComplaints, loading: complaintsLoading, submitComplaint } = useComplaints();
+  
   const [activeTab, setActiveTab] = useState<'readings' | 'complaints' | 'maintenance'>('readings');
   const [newReading, setNewReading] = useState({
     location: '',
@@ -67,16 +71,32 @@ export function MobileApp({ sensorData }: MobileAppProps) {
 
   const handleComplaintSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    // Simulate submission
-    alert('Complaint submitted successfully!');
-    setComplaint({ 
-      description: '', 
-      location: '', 
-      priority: 'medium',
-      hasPhoto: false,
-      hasGPS: false,
-      gpsCoordinates: ''
-    });
+    
+    const complaintData = {
+      description: complaint.description,
+      location: complaint.location,
+      priority: complaint.priority as 'low' | 'medium' | 'high',
+      status: 'pending' as const,
+      submitted_by: 'field-staff-001', // This would come from authentication
+      photo_url: complaint.hasPhoto ? 'photo-url-here' : undefined,
+      gps_coordinates: complaint.hasGPS ? complaint.gpsCoordinates : undefined
+    };
+
+    submitComplaint(complaintData)
+      .then(() => {
+        alert('Complaint submitted successfully!');
+        setComplaint({ 
+          description: '', 
+          location: '', 
+          priority: 'medium',
+          hasPhoto: false,
+          hasGPS: false,
+          gpsCoordinates: ''
+        });
+      })
+      .catch((error) => {
+        alert(`Error submitting complaint: ${error.message}`);
+      });
   };
 
   const handlePhotoCapture = () => {
@@ -310,12 +330,13 @@ export function MobileApp({ sensorData }: MobileAppProps) {
             {/* Recent Complaints */}
             <div>
               <h3 className="font-medium text-gray-900 mb-2">Recent Complaints</h3>
+              {complaintsLoading && (
+                <div className="flex items-center justify-center py-4">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                </div>
+              )}
               <div className="space-y-2">
-                {[
-                  { id: '001', issue: 'Low water pressure in Ward 3', status: 'resolved', time: '1 day ago', hasPhoto: true, hasGPS: true },
-                  { id: '002', issue: 'Pipeline leak near school', status: 'in-progress', time: '2 days ago', hasPhoto: true, hasGPS: false },
-                  { id: '003', issue: 'Dirty water supply', status: 'pending', time: '3 days ago', hasPhoto: false, hasGPS: true }
-                ].map((complaint) => (
+                {realTimeComplaints.slice(0, 3).map((complaint) => (
                   <div key={complaint.id} className="p-3 bg-gray-50 rounded-lg">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-xs font-medium text-gray-500">#{complaint.id}</span>
@@ -330,17 +351,17 @@ export function MobileApp({ sensorData }: MobileAppProps) {
                         <span className="text-xs font-medium capitalize">{complaint.status}</span>
                       </div>
                     </div>
-                    <p className="text-sm text-gray-900">{complaint.issue}</p>
+                    <p className="text-sm text-gray-900">{complaint.description}</p>
                     <div className="flex items-center justify-between mt-2">
-                      <p className="text-xs text-gray-600">{complaint.time}</p>
+                      <p className="text-xs text-gray-600">{new Date(complaint.submitted_at).toLocaleDateString()}</p>
                       <div className="flex items-center space-x-2">
-                        {complaint.hasPhoto && (
+                        {complaint.photo_url && (
                           <div className="flex items-center space-x-1 text-green-600">
                             <Image className="w-3 h-3" />
                             <span className="text-xs">Photo</span>
                           </div>
                         )}
-                        {complaint.hasGPS && (
+                        {complaint.gps_coordinates && (
                           <div className="flex items-center space-x-1 text-blue-600">
                             <Navigation className="w-3 h-3" />
                             <span className="text-xs">GPS</span>

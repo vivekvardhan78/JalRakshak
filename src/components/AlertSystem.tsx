@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useAlerts } from '../hooks/useRealTimeData';
 import { 
   AlertTriangle, 
   AlertCircle, 
@@ -39,109 +40,14 @@ interface Alert {
 }
 
 export function AlertSystem({ sensorData }: AlertSystemProps) {
-  const [alerts, setAlerts] = useState<Alert[]>([]);
+  // Use real-time alerts data
+  const { alerts: realTimeAlerts, loading: alertsLoading, acknowledgeAlert: apiAcknowledgeAlert, resolveAlert: apiResolveAlert } = useAlerts();
+  
   const [filter, setFilter] = useState<'all' | 'critical' | 'warning' | 'info'>('all');
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
 
-  // Generate alerts based on sensor data
-  useEffect(() => {
-    const newAlerts: Alert[] = [];
-
-    if (sensorData.pressure < 3.0) {
-      newAlerts.push({
-        id: `pressure-${Date.now()}`,
-        type: 'critical',
-        title: 'Low System Pressure Detected',
-        description: `Pressure has dropped to ${sensorData.pressure.toFixed(1)} bar, below the critical threshold of 3.0 bar.`,
-        timestamp: new Date().toLocaleString(),
-        source: 'Pressure Sensor P1',
-        acknowledged: false,
-        resolved: false,
-        actions: ['Check pump operation', 'Inspect for leaks', 'Contact maintenance team']
-      });
-    }
-
-    if (sensorData.waterFlow < 35) {
-      newAlerts.push({
-        id: `flow-${Date.now()}`,
-        type: 'warning',
-        title: 'Low Water Flow Rate',
-        description: `Flow rate is ${sensorData.waterFlow.toFixed(1)} L/min, below optimal range.`,
-        timestamp: new Date().toLocaleString(),
-        source: 'Flow Sensor F1',
-        acknowledged: false,
-        resolved: false,
-        actions: ['Check filter condition', 'Verify pump settings', 'Inspect inlet valve']
-      });
-    }
-
-    if (sensorData.quality < 90) {
-      newAlerts.push({
-        id: `quality-${Date.now()}`,
-        type: 'warning',
-        title: 'Water Quality Below Standard',
-        description: `Quality index is ${sensorData.quality.toFixed(0)}%, below the recommended 90% threshold.`,
-        timestamp: new Date().toLocaleString(),
-        source: 'Quality Sensor Q1',
-        acknowledged: false,
-        resolved: false,
-        actions: ['Test chlorine levels', 'Check filtration system', 'Schedule water sampling']
-      });
-    }
-
-    if (sensorData.ph < 6.5 || sensorData.ph > 8.5) {
-      newAlerts.push({
-        id: `ph-${Date.now()}`,
-        type: 'warning',
-        title: 'pH Level Out of Range',
-        description: `pH level is ${sensorData.ph.toFixed(1)}, outside the safe range of 6.5-8.5.`,
-        timestamp: new Date().toLocaleString(),
-        source: 'pH Sensor',
-        acknowledged: false,
-        resolved: false,
-        actions: ['Test pH manually', 'Check sensor calibration', 'Adjust treatment system']
-      });
-    }
-
-    // Add some static alerts for demonstration
-    const staticAlerts: Alert[] = [
-      {
-        id: 'leak-001',
-        type: 'critical',
-        title: 'Pipeline Leak Detected',
-        description: 'AI algorithms detected potential leak in Ward 3 distribution line based on pressure drop patterns.',
-        timestamp: '2025-01-21 14:30:00',
-        source: 'ML Leak Detection',
-        acknowledged: false,
-        resolved: false,
-        actions: ['Dispatch field team', 'Isolate affected section', 'Notify affected households']
-      },
-      {
-        id: 'maintenance-001',
-        type: 'info',
-        title: 'Scheduled Maintenance Reminder',
-        description: 'Monthly tank cleaning is due for Main Storage Tank.',
-        timestamp: '2025-01-21 12:00:00',
-        source: 'Maintenance Schedule',
-        acknowledged: true,
-        resolved: false,
-        actions: ['Schedule cleaning crew', 'Notify supervisor', 'Prepare equipment']
-      },
-      {
-        id: 'consumption-001',
-        type: 'warning',
-        title: 'Unusual Consumption Pattern',
-        description: 'Ward 2 showing 25% higher than average water consumption in the last 24 hours.',
-        timestamp: '2025-01-21 10:15:00',
-        source: 'Consumption Analytics',
-        acknowledged: true,
-        resolved: true,
-        actions: ['Investigate cause', 'Check for leaks', 'Contact ward representative']
-      }
-    ];
-
-    setAlerts([...newAlerts, ...staticAlerts]);
-  }, [sensorData]);
+  // Use real-time alerts, fallback to empty array if loading
+  const alerts = alertsLoading ? [] : realTimeAlerts;
 
   const getAlertIcon = (type: string) => {
     switch (type) {
@@ -181,15 +87,22 @@ export function AlertSystem({ sensorData }: AlertSystemProps) {
   };
 
   const resolveAlert = (alertId: string) => {
-    setAlerts(alerts.map(alert => 
-      alert.id === alertId ? { ...alert, resolved: true, acknowledged: true } : alert
-    ));
+    apiResolveAlert(alertId).catch(error => {
+      alert(`Error resolving alert: ${error.message}`);
+    });
   };
 
   return (
-    <div className="space-y-6">
-      {/* Alert Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+    apiAcknowledgeAlert(alertId).catch(error => {
+      {alertsLoading && (
+        <div className="flex items-center justify-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          <span className="ml-2 text-gray-600">Loading alerts...</span>
+        </div>
+      )}
+      
+      alert(`Error acknowledging alert: ${error.message}`);
+    });
         {[
           { label: 'Critical Alerts', count: criticalCount, color: 'from-red-500 to-red-600', icon: AlertTriangle },
           { label: 'Warnings', count: warningCount, color: 'from-yellow-500 to-yellow-600', icon: AlertCircle },

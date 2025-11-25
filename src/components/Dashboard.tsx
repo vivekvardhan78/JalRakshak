@@ -1,4 +1,5 @@
 import React from 'react';
+import { useSensorData, useAnalytics } from '../hooks/useRealTimeData';
 import { 
   Droplets, 
   Gauge, 
@@ -27,31 +28,46 @@ interface DashboardProps {
 }
 
 export function Dashboard({ sensorData }: DashboardProps) {
+  // Use real-time data hooks
+  const { sensorData: realTimeSensorData, loading: sensorLoading, error: sensorError } = useSensorData();
+  const { analytics, loading: analyticsLoading } = useAnalytics();
+  
+  // Use real-time data if available, fallback to props
+  const currentSensorData = sensorLoading ? sensorData : realTimeSensorData;
+
+  if (sensorError) {
+    return (
+      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <p className="text-red-800">Error loading sensor data: {sensorError}</p>
+      </div>
+    );
+  }
+
   const metrics = [
     {
       label: 'Water Flow Rate',
-      value: `${sensorData.waterFlow.toFixed(1)} L/min`,
+      value: `${currentSensorData.waterFlow.toFixed(1)} L/min`,
       icon: Droplets,
       color: 'from-blue-500 to-blue-600',
-      status: sensorData.waterFlow > 40 ? 'normal' : 'warning'
+      status: currentSensorData.waterFlow > 40 ? 'normal' : 'warning'
     },
     {
       label: 'System Pressure',
-      value: `${sensorData.pressure.toFixed(1)} bar`,
+      value: `${currentSensorData.pressure.toFixed(1)} bar`,
       icon: Gauge,
       color: 'from-green-500 to-green-600',
-      status: sensorData.pressure > 3 ? 'normal' : 'critical'
+      status: currentSensorData.pressure > 3 ? 'normal' : 'critical'
     },
     {
       label: 'Water Quality',
-      value: `${sensorData.quality.toFixed(0)}%`,
+      value: `${currentSensorData.quality.toFixed(0)}%`,
       icon: Shield,
       color: 'from-emerald-500 to-emerald-600',
-      status: sensorData.quality > 90 ? 'normal' : 'warning'
+      status: currentSensorData.quality > 90 ? 'normal' : 'warning'
     },
     {
       label: 'Temperature',
-      value: `${sensorData.temperature.toFixed(1)}°C`,
+      value: `${currentSensorData.temperature.toFixed(1)}°C`,
       icon: Thermometer,
       color: 'from-orange-500 to-orange-600',
       status: 'normal'
@@ -59,8 +75,8 @@ export function Dashboard({ sensorData }: DashboardProps) {
   ];
 
   const additionalMetrics = [
-    { label: 'pH Level', value: sensorData.ph.toFixed(1), unit: 'pH' },
-    { label: 'Turbidity', value: sensorData.turbidity.toFixed(1), unit: 'NTU' },
+    { label: 'pH Level', value: currentSensorData.ph.toFixed(1), unit: 'pH' },
+    { label: 'Turbidity', value: currentSensorData.turbidity.toFixed(1), unit: 'NTU' },
     { label: 'Active Connections', value: '247', unit: 'homes' },
     { label: 'Daily Consumption', value: '12,450', unit: 'L' }
   ];
@@ -80,6 +96,11 @@ export function Dashboard({ sensorData }: DashboardProps) {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {metrics.map(({ label, value, icon: Icon, color, status }) => (
           <div key={label} className="bg-white rounded-xl shadow-lg overflow-hidden">
+            {sensorLoading && (
+              <div className="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+              </div>
+            )}
             <div className={`bg-gradient-to-r ${color} p-4`}>
               <div className="flex items-center justify-between text-white">
                 <Icon className="w-8 h-8" />
