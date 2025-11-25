@@ -9,7 +9,9 @@ import {
   AlertCircle,
   User,
   Phone,
-  Mail
+  Mail,
+  Image,
+  Navigation
 } from 'lucide-react';
 
 interface SensorData {
@@ -36,7 +38,10 @@ export function MobileApp({ sensorData }: MobileAppProps) {
   const [complaint, setComplaint] = useState({
     description: '',
     location: '',
-    priority: 'medium'
+    priority: 'medium',
+    hasPhoto: false,
+    hasGPS: false,
+    gpsCoordinates: ''
   });
 
   const recentReadings = [
@@ -64,7 +69,44 @@ export function MobileApp({ sensorData }: MobileAppProps) {
     e.preventDefault();
     // Simulate submission
     alert('Complaint submitted successfully!');
-    setComplaint({ description: '', location: '', priority: 'medium' });
+    setComplaint({ 
+      description: '', 
+      location: '', 
+      priority: 'medium',
+      hasPhoto: false,
+      hasGPS: false,
+      gpsCoordinates: ''
+    });
+  };
+
+  const handlePhotoCapture = () => {
+    // Simulate photo capture
+    setComplaint({...complaint, hasPhoto: true});
+    alert('Photo captured successfully!');
+  };
+
+  const handleGPSCapture = () => {
+    // Simulate GPS capture
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          const coords = `${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`;
+          setComplaint({...complaint, hasGPS: true, gpsCoordinates: coords});
+          alert(`GPS location captured: ${coords}`);
+        },
+        () => {
+          // Fallback for demo
+          const demoCoords = '23.2599, 77.4126'; // Sample coordinates
+          setComplaint({...complaint, hasGPS: true, gpsCoordinates: demoCoords});
+          alert(`GPS location captured: ${demoCoords}`);
+        }
+      );
+    } else {
+      // Fallback for demo
+      const demoCoords = '23.2599, 77.4126';
+      setComplaint({...complaint, hasGPS: true, gpsCoordinates: demoCoords});
+      alert(`GPS location captured: ${demoCoords}`);
+    }
   };
 
   return (
@@ -220,6 +262,43 @@ export function MobileApp({ sensorData }: MobileAppProps) {
                 <option value="medium">Medium Priority</option>
                 <option value="high">High Priority</option>
               </select>
+              
+              {/* Photo and GPS Options */}
+              <div className="flex space-x-2">
+                <button
+                  type="button"
+                  onClick={handlePhotoCapture}
+                  className={`flex-1 flex items-center justify-center space-x-2 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                    complaint.hasPhoto 
+                      ? 'bg-green-100 text-green-700 border border-green-300' 
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  <Camera className="w-4 h-4" />
+                  <span>{complaint.hasPhoto ? 'Photo Added' : 'Add Photo'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleGPSCapture}
+                  className={`flex-1 flex items-center justify-center space-x-2 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
+                    complaint.hasGPS 
+                      ? 'bg-blue-100 text-blue-700 border border-blue-300' 
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  <Navigation className="w-4 h-4" />
+                  <span>{complaint.hasGPS ? 'GPS Added' : 'Add GPS'}</span>
+                </button>
+              </div>
+              
+              {/* Show GPS coordinates if captured */}
+              {complaint.hasGPS && complaint.gpsCoordinates && (
+                <div className="p-2 bg-blue-50 rounded-lg">
+                  <p className="text-xs text-blue-600 font-medium">GPS Coordinates:</p>
+                  <p className="text-sm text-blue-800 font-mono">{complaint.gpsCoordinates}</p>
+                </div>
+              )}
+              
               <button
                 type="submit"
                 className="w-full bg-red-600 text-white py-2 px-3 rounded-lg text-sm font-medium hover:bg-red-700 transition-colors"
@@ -233,9 +312,9 @@ export function MobileApp({ sensorData }: MobileAppProps) {
               <h3 className="font-medium text-gray-900 mb-2">Recent Complaints</h3>
               <div className="space-y-2">
                 {[
-                  { id: '001', issue: 'Low water pressure in Ward 3', status: 'resolved', time: '1 day ago' },
-                  { id: '002', issue: 'Pipeline leak near school', status: 'in-progress', time: '2 days ago' },
-                  { id: '003', issue: 'Dirty water supply', status: 'pending', time: '3 days ago' }
+                  { id: '001', issue: 'Low water pressure in Ward 3', status: 'resolved', time: '1 day ago', hasPhoto: true, hasGPS: true },
+                  { id: '002', issue: 'Pipeline leak near school', status: 'in-progress', time: '2 days ago', hasPhoto: true, hasGPS: false },
+                  { id: '003', issue: 'Dirty water supply', status: 'pending', time: '3 days ago', hasPhoto: false, hasGPS: true }
                 ].map((complaint) => (
                   <div key={complaint.id} className="p-3 bg-gray-50 rounded-lg">
                     <div className="flex items-center justify-between mb-1">
@@ -252,7 +331,23 @@ export function MobileApp({ sensorData }: MobileAppProps) {
                       </div>
                     </div>
                     <p className="text-sm text-gray-900">{complaint.issue}</p>
-                    <p className="text-xs text-gray-600 mt-1">{complaint.time}</p>
+                    <div className="flex items-center justify-between mt-2">
+                      <p className="text-xs text-gray-600">{complaint.time}</p>
+                      <div className="flex items-center space-x-2">
+                        {complaint.hasPhoto && (
+                          <div className="flex items-center space-x-1 text-green-600">
+                            <Image className="w-3 h-3" />
+                            <span className="text-xs">Photo</span>
+                          </div>
+                        )}
+                        {complaint.hasGPS && (
+                          <div className="flex items-center space-x-1 text-blue-600">
+                            <Navigation className="w-3 h-3" />
+                            <span className="text-xs">GPS</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
