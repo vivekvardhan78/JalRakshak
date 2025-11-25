@@ -81,9 +81,9 @@ export function AlertSystem({ sensorData }: AlertSystemProps) {
   const warningCount = alerts.filter(a => a.type === 'warning' && !a.resolved).length;
 
   const acknowledgeAlert = (alertId: string) => {
-    setAlerts(alerts.map(alert => 
-      alert.id === alertId ? { ...alert, acknowledged: true } : alert
-    ));
+    apiAcknowledgeAlert(alertId).catch(error => {
+      alert(`Error acknowledging alert: ${error.message}`);
+    });
   };
 
   const resolveAlert = (alertId: string) => {
@@ -93,7 +93,7 @@ export function AlertSystem({ sensorData }: AlertSystemProps) {
   };
 
   return (
-    apiAcknowledgeAlert(alertId).catch(error => {
+    <div className="space-y-6">
       {alertsLoading && (
         <div className="flex items-center justify-center py-8">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
@@ -101,8 +101,8 @@ export function AlertSystem({ sensorData }: AlertSystemProps) {
         </div>
       )}
       
-      alert(`Error acknowledging alert: ${error.message}`);
-    });
+      {/* Alert Statistics */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
           { label: 'Critical Alerts', count: criticalCount, color: 'from-red-500 to-red-600', icon: AlertTriangle },
           { label: 'Warnings', count: warningCount, color: 'from-yellow-500 to-yellow-600', icon: AlertCircle },
