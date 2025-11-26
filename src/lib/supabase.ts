@@ -71,6 +71,11 @@ export interface Alert {
 export class JalRakshakAPI {
   // Sensor Data
   static async getLatestSensorReadings() {
+    if (!supabase) {
+      console.warn('Supabase not configured, returning mock data');
+      return [];
+    }
+    
     const { data, error } = await supabase
       .from('sensor_readings')
       .select('*')
@@ -82,6 +87,11 @@ export class JalRakshakAPI {
   }
 
   static async getSensorReadingsByType(sensorType: string) {
+    if (!supabase) {
+      console.warn('Supabase not configured, returning mock data');
+      return [];
+    }
+    
     const { data, error } = await supabase
       .from('sensor_readings')
       .select('*')
@@ -94,6 +104,10 @@ export class JalRakshakAPI {
   }
 
   static async insertSensorReading(reading: Omit<SensorReading, 'id'>) {
+    if (!supabase) {
+      throw new Error('Supabase not configured');
+    }
+    
     const { data, error } = await supabase
       .from('sensor_readings')
       .insert([reading])
@@ -105,6 +119,11 @@ export class JalRakshakAPI {
 
   // Complaints
   static async getComplaints() {
+    if (!supabase) {
+      console.warn('Supabase not configured, returning mock data');
+      return [];
+    }
+    
     const { data, error } = await supabase
       .from('complaints')
       .select('*')
@@ -115,6 +134,10 @@ export class JalRakshakAPI {
   }
 
   static async submitComplaint(complaint: Omit<Complaint, 'id' | 'submitted_at'>) {
+    if (!supabase) {
+      throw new Error('Supabase not configured');
+    }
+    
     const { data, error } = await supabase
       .from('complaints')
       .insert([{
@@ -128,6 +151,10 @@ export class JalRakshakAPI {
   }
 
   static async updateComplaintStatus(id: string, status: string, assignedTo?: string) {
+    if (!supabase) {
+      throw new Error('Supabase not configured');
+    }
+    
     const updateData: any = { status };
     if (assignedTo) updateData.assigned_to = assignedTo;
     if (status === 'resolved') updateData.resolved_at = new Date().toISOString();
@@ -144,6 +171,11 @@ export class JalRakshakAPI {
 
   // Maintenance Tasks
   static async getMaintenanceTasks() {
+    if (!supabase) {
+      console.warn('Supabase not configured, returning mock data');
+      return [];
+    }
+    
     const { data, error } = await supabase
       .from('maintenance_tasks')
       .select('*')
@@ -154,6 +186,10 @@ export class JalRakshakAPI {
   }
 
   static async createMaintenanceTask(task: Omit<MaintenanceTask, 'id'>) {
+    if (!supabase) {
+      throw new Error('Supabase not configured');
+    }
+    
     const { data, error } = await supabase
       .from('maintenance_tasks')
       .insert([task])
@@ -164,6 +200,10 @@ export class JalRakshakAPI {
   }
 
   static async completeMaintenanceTask(id: string) {
+    if (!supabase) {
+      throw new Error('Supabase not configured');
+    }
+    
     const { data, error } = await supabase
       .from('maintenance_tasks')
       .update({
@@ -179,6 +219,11 @@ export class JalRakshakAPI {
 
   // Alerts
   static async getAlerts() {
+    if (!supabase) {
+      console.warn('Supabase not configured, returning mock data');
+      return [];
+    }
+    
     const { data, error } = await supabase
       .from('alerts')
       .select('*')
@@ -189,6 +234,10 @@ export class JalRakshakAPI {
   }
 
   static async createAlert(alert: Omit<Alert, 'id'>) {
+    if (!supabase) {
+      throw new Error('Supabase not configured');
+    }
+    
     const { data, error } = await supabase
       .from('alerts')
       .insert([alert])
@@ -199,6 +248,10 @@ export class JalRakshakAPI {
   }
 
   static async acknowledgeAlert(id: string) {
+    if (!supabase) {
+      throw new Error('Supabase not configured');
+    }
+    
     const { data, error } = await supabase
       .from('alerts')
       .update({ acknowledged: true })
@@ -210,6 +263,10 @@ export class JalRakshakAPI {
   }
 
   static async resolveAlert(id: string) {
+    if (!supabase) {
+      throw new Error('Supabase not configured');
+    }
+    
     const { data, error } = await supabase
       .from('alerts')
       .update({ resolved: true, acknowledged: true })
@@ -222,6 +279,11 @@ export class JalRakshakAPI {
 
   // Real-time subscriptions
   static subscribeTo(table: string, callback: (payload: any) => void) {
+    if (!supabase) {
+      console.warn('Supabase not configured, real-time subscriptions disabled');
+      return { unsubscribe: () => {} };
+    }
+    
     return supabase
       .channel(`${table}_changes`)
       .on('postgres_changes', 
@@ -233,6 +295,11 @@ export class JalRakshakAPI {
 
   // Analytics
   static async getConsumptionAnalytics(days: number = 7) {
+    if (!supabase) {
+      console.warn('Supabase not configured, returning mock data');
+      return [];
+    }
+    
     const { data, error } = await supabase
       .from('sensor_readings')
       .select('value, timestamp')
@@ -245,6 +312,11 @@ export class JalRakshakAPI {
   }
 
   static async getSystemHealth() {
+    if (!supabase) {
+      console.warn('Supabase not configured, returning mock data');
+      return {};
+    }
+    
     const { data, error } = await supabase
       .from('sensor_readings')
       .select('sensor_type, status, timestamp')
