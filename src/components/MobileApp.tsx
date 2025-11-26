@@ -112,20 +112,14 @@ export function MobileApp({ sensorData }: MobileAppProps) {
         (position) => {
           const coords = `${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`;
           setComplaint({...complaint, hasGPS: true, gpsCoordinates: coords});
-          alert(`GPS location captured: ${coords}`);
+          alert(`GPS location captured successfully!\nCoordinates: ${coords}`);
         },
         () => {
-          // Fallback for demo
-          const demoCoords = '23.2599, 77.4126'; // Sample coordinates
-          setComplaint({...complaint, hasGPS: true, gpsCoordinates: demoCoords});
-          alert(`GPS location captured: ${demoCoords}`);
+          alert('Unable to get your location. Please enable location services and try again.');
         }
       );
     } else {
-      // Fallback for demo
-      const demoCoords = '23.2599, 77.4126';
-      setComplaint({...complaint, hasGPS: true, gpsCoordinates: demoCoords});
-      alert(`GPS location captured: ${demoCoords}`);
+      alert('Geolocation is not supported by this browser.');
     }
   };
 
