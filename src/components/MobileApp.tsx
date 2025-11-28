@@ -149,7 +149,6 @@ export function MobileApp({ sensorData }: MobileAppProps) {
 
   const clearLocation = () => {
     setGpsLocation(null);
-    }
   };
 
   return (
