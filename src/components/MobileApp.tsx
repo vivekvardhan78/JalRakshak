@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useComplaints } from '../hooks/useRealTimeData';
+import { useComplaints, useSensorData } from '../hooks/useRealTimeData';
 import { 
   Plus, 
   Send, 
@@ -12,7 +12,9 @@ import {
   Phone,
   Mail,
   Image,
-  Navigation
+  Navigation,
+  Upload,
+  X
 } from 'lucide-react';
 
 interface SensorData {
@@ -31,7 +33,19 @@ interface MobileAppProps {
 
 export function MobileApp({ sensorData }: MobileAppProps) {
   // Use real-time complaints data
-  const { complaints: realTimeComplaints, loading: complaintsLoading, submitComplaint } = useComplaints();
+  const { 
+    complaints: realTimeComplaints, 
+    loading: complaintsLoading, 
+    submitComplaint, 
+    capturePhoto, 
+    getCurrentLocation 
+  } = useComplaints();
+  
+  // Use real-time sensor data
+  const { sensorData: realTimeSensorData, loading: sensorLoading } = useSensorData();
+  
+  // Use real-time data if available, fallback to props
+  const currentSensorData = sensorLoading ? sensorData : realTimeSensorData;
   
   const [activeTab, setActiveTab] = useState<'readings' | 'complaints' | 'maintenance'>('readings');
   const [newReading, setNewReading] = useState({
@@ -43,10 +57,13 @@ export function MobileApp({ sensorData }: MobileAppProps) {
     description: '',
     location: '',
     priority: 'medium',
-    hasPhoto: false,
-    hasGPS: false,
-    gpsCoordinates: ''
+    category: 'general'
   });
+  
+  const [capturedPhotos, setCapturedPhotos] = useState<File[]>([]);
+  const [gpsLocation, setGpsLocation] = useState<{latitude: number, longitude: number, accuracy: number} | null>(null);
+  const [isCapturingPhoto, setIsCapturingPhoto] = useState(false);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
 
   const recentReadings = [
     { location: 'Village Center Tank', value: '1850 L', time: '2 hours ago', status: 'normal' },
@@ -78,48 +95,60 @@ export function MobileApp({ sensorData }: MobileAppProps) {
       priority: complaint.priority as 'low' | 'medium' | 'high',
       status: 'pending' as const,
       submitted_by: 'field-staff-001', // This would come from authentication
-      photo_url: complaint.hasPhoto ? 'photo-url-here' : undefined,
-      gps_coordinates: complaint.hasGPS ? complaint.gpsCoordinates : undefined
+      category: complaint.category as any,
+      gps_coordinates: gpsLocation ? `POINT(${gpsLocation.longitude} ${gpsLocation.latitude})` : undefined,
+      gps_accuracy: gpsLocation?.accuracy
     };
 
-    submitComplaint(complaintData)
+    submitComplaint(complaintData, capturedPhotos.length > 0 ? capturedPhotos : undefined)
       .then(() => {
         alert('Complaint submitted successfully!');
         setComplaint({ 
           description: '', 
           location: '', 
-          priority: 'medium',
-          hasPhoto: false,
-          hasGPS: false,
-          gpsCoordinates: ''
+          priority: 'medium', 
+          category: 'general'
         });
+        setCapturedPhotos([]);
+        setGpsLocation(null);
       })
       .catch((error) => {
         alert(`Error submitting complaint: ${error.message}`);
       });
   };
 
-  const handlePhotoCapture = () => {
-    // Simulate photo capture
-    setComplaint({...complaint, hasPhoto: true});
-    alert('Photo captured successfully!');
+  const handlePhotoCapture = async () => {
+    setIsCapturingPhoto(true);
+    try {
+      const photo = await capturePhoto();
+      setCapturedPhotos(prev => [...prev, photo]);
+      alert('Photo captured successfully!');
+    } catch (error) {
+      alert(`Failed to capture photo: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsCapturingPhoto(false);
+    }
   };
 
-  const handleGPSCapture = () => {
-    // Simulate GPS capture
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          const coords = `${position.coords.latitude.toFixed(6)}, ${position.coords.longitude.toFixed(6)}`;
-          setComplaint({...complaint, hasGPS: true, gpsCoordinates: coords});
-          alert(`GPS location captured successfully!\nCoordinates: ${coords}`);
-        },
-        () => {
-          alert('Unable to get your location. Please enable location services and try again.');
-        }
-      );
-    } else {
-      alert('Geolocation is not supported by this browser.');
+  const handleGPSCapture = async () => {
+    setIsGettingLocation(true);
+    try {
+      const location = await getCurrentLocation();
+      setGpsLocation(location);
+      alert(`GPS location captured successfully!\nCoordinates: ${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}\nAccuracy: ${location.accuracy.toFixed(0)}m`);
+    } catch (error) {
+      alert(`Failed to get location: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsGettingLocation(false);
+    }
+  };
+
+  const removePhoto = (index: number) => {
+    setCapturedPhotos(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const clearLocation = () => {
+    setGpsLocation(null);
     }
   };
 
@@ -168,11 +197,11 @@ export function MobileApp({ sensorData }: MobileAppProps) {
             {/* Quick Stats */}
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-blue-50 p-3 rounded-lg text-center">
-                <p className="text-lg font-bold text-blue-600">{sensorData.waterFlow.toFixed(1)}</p>
+                <p className="text-lg font-bold text-blue-600">{currentSensorData.waterFlow.toFixed(1)}</p>
                 <p className="text-xs text-gray-600">Flow Rate (L/min)</p>
               </div>
               <div className="bg-green-50 p-3 rounded-lg text-center">
-                <p className="text-lg font-bold text-green-600">{sensorData.pressure.toFixed(1)}</p>
+                <p className="text-lg font-bold text-green-600">{currentSensorData.pressure.toFixed(1)}</p>
                 <p className="text-xs text-gray-600">Pressure (bar)</p>
               </div>
             </div>
@@ -277,39 +306,105 @@ export function MobileApp({ sensorData }: MobileAppProps) {
                 <option value="high">High Priority</option>
               </select>
               
+              <select
+                value={complaint.category}
+                onChange={(e) => setComplaint({...complaint, category: e.target.value})}
+                className="w-full p-2 border border-gray-300 rounded-lg text-sm"
+              >
+                <option value="general">General Issue</option>
+                <option value="leak">Water Leak</option>
+                <option value="quality">Water Quality</option>
+                <option value="pressure">Low Pressure</option>
+                <option value="outage">Water Outage</option>
+              </select>
+              
               {/* Photo and GPS Options */}
               <div className="flex space-x-2">
                 <button
                   type="button"
                   onClick={handlePhotoCapture}
+                  disabled={isCapturingPhoto}
                   className={`flex-1 flex items-center justify-center space-x-2 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                    complaint.hasPhoto 
+                    capturedPhotos.length > 0
                       ? 'bg-green-100 text-green-700 border border-green-300' 
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+                  } ${isCapturingPhoto ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                  <Camera className="w-4 h-4" />
-                  <span>{complaint.hasPhoto ? 'Photo Added' : 'Add Photo'}</span>
+                  {isCapturingPhoto ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
+                  ) : (
+                    <Camera className="w-4 h-4" />
+                  )}
+                  <span>
+                    {isCapturingPhoto ? 'Capturing...' : 
+                     capturedPhotos.length > 0 ? `${capturedPhotos.length} Photo${capturedPhotos.length > 1 ? 's' : ''}` : 'Add Photo'}
+                  </span>
                 </button>
                 <button
                   type="button"
                   onClick={handleGPSCapture}
+                  disabled={isGettingLocation}
                   className={`flex-1 flex items-center justify-center space-x-2 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                    complaint.hasGPS 
+                    gpsLocation
                       ? 'bg-blue-100 text-blue-700 border border-blue-300' 
                       : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+                  } ${isGettingLocation ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                  <Navigation className="w-4 h-4" />
-                  <span>{complaint.hasGPS ? 'GPS Added' : 'Add GPS'}</span>
+                  {isGettingLocation ? (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
+                  ) : (
+                    <Navigation className="w-4 h-4" />
+                  )}
+                  <span>
+                    {isGettingLocation ? 'Getting Location...' : 
+                     gpsLocation ? 'GPS Added' : 'Add GPS'}
+                  </span>
                 </button>
               </div>
               
+              {/* Show captured photos */}
+              {capturedPhotos.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs text-gray-600 font-medium">Captured Photos:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {capturedPhotos.map((photo, index) => (
+                      <div key={index} className="relative">
+                        <div className="w-16 h-16 bg-green-100 rounded-lg flex items-center justify-center border border-green-300">
+                          <Image className="w-6 h-6 text-green-600" />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => removePhoto(index)}
+                          className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs hover:bg-red-600"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                        <p className="text-xs text-center mt-1 text-gray-600">{photo.name.substring(0, 8)}...</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
               {/* Show GPS coordinates if captured */}
-              {complaint.hasGPS && complaint.gpsCoordinates && (
+              {gpsLocation && (
                 <div className="p-2 bg-blue-50 rounded-lg">
-                  <p className="text-xs text-blue-600 font-medium">GPS Coordinates:</p>
-                  <p className="text-sm text-blue-800 font-mono">{complaint.gpsCoordinates}</p>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs text-blue-600 font-medium">GPS Coordinates:</p>
+                      <p className="text-sm text-blue-800 font-mono">
+                        {gpsLocation.latitude.toFixed(6)}, {gpsLocation.longitude.toFixed(6)}
+                      </p>
+                      <p className="text-xs text-blue-600">Accuracy: ±{gpsLocation.accuracy.toFixed(0)}m</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={clearLocation}
+                      className="text-blue-600 hover:text-blue-800"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               )}
               
@@ -349,10 +444,10 @@ export function MobileApp({ sensorData }: MobileAppProps) {
                     <div className="flex items-center justify-between mt-2">
                       <p className="text-xs text-gray-600">{new Date(complaint.submitted_at).toLocaleDateString()}</p>
                       <div className="flex items-center space-x-2">
-                        {complaint.photo_url && (
+                        {complaint.photo_urls && complaint.photo_urls.length > 0 && (
                           <div className="flex items-center space-x-1 text-green-600">
                             <Image className="w-3 h-3" />
-                            <span className="text-xs">Photo</span>
+                            <span className="text-xs">{complaint.photo_urls.length} Photo{complaint.photo_urls.length > 1 ? 's' : ''}</span>
                           </div>
                         )}
                         {complaint.gps_coordinates && (

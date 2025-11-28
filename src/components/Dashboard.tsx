@@ -1,5 +1,5 @@
 import React from 'react';
-import { useSensorData, useAnalytics } from '../hooks/useRealTimeData';
+import { useSensorData, useAnalytics, useSensorMonitoring } from '../hooks/useRealTimeData';
 import { 
   Droplets, 
   Gauge, 
@@ -10,7 +10,9 @@ import {
   TrendingUp,
   Activity,
   Sun,
-  Settings
+  Settings,
+  Wifi,
+  Battery
 } from 'lucide-react';
 
 interface SensorData {
@@ -29,8 +31,9 @@ interface DashboardProps {
 
 export function Dashboard({ sensorData }: DashboardProps) {
   // Use real-time data hooks
-  const { sensorData: realTimeSensorData, loading: sensorLoading, error: sensorError } = useSensorData();
+  const { sensorData: realTimeSensorData, loading: sensorLoading, error: sensorError, lastUpdate } = useSensorData();
   const { analytics, loading: analyticsLoading } = useAnalytics();
+  const { sensorReadings, getLatestReading } = useSensorMonitoring();
   
   // Use real-time data if available, fallback to props
   const currentSensorData = sensorLoading ? sensorData : realTimeSensorData;
@@ -75,10 +78,12 @@ export function Dashboard({ sensorData }: DashboardProps) {
   ];
 
   const additionalMetrics = [
-    { label: 'pH Level', value: currentSensorData.ph.toFixed(1), unit: 'pH' },
-    { label: 'Turbidity', value: currentSensorData.turbidity.toFixed(1), unit: 'NTU' },
+    { label: 'pH Level', value: currentSensorData.ph.toFixed(1), unit: 'pH', status: currentSensorData.ph >= 6.5 && currentSensorData.ph <= 8.5 ? 'normal' : 'warning' },
+    { label: 'Turbidity', value: currentSensorData.turbidity.toFixed(1), unit: 'NTU', status: currentSensorData.turbidity <= 1.0 ? 'normal' : 'warning' },
     { label: 'Active Connections', value: '247', unit: 'homes' },
-    { label: 'Daily Consumption', value: '12,450', unit: 'L' }
+    { label: 'Daily Consumption', value: '12,450', unit: 'L' },
+    { label: 'System Uptime', value: '99.2', unit: '%' },
+    { label: 'Last Update', value: lastUpdate.toLocaleTimeString(), unit: '' }
   ];
 
   const getStatusColor = (status: string) => {
@@ -113,6 +118,28 @@ export function Dashboard({ sensorData }: DashboardProps) {
             <div className="p-4">
               <h3 className="text-sm font-medium text-gray-600 mb-1">{label}</h3>
               <p className={`text-2xl font-bold ${getStatusColor(status)}`}>{value}</p>
+              {/* Show sensor details if available */}
+              {getLatestReading(label.toLowerCase().includes('flow') ? 'flow' : 
+                              label.toLowerCase().includes('pressure') ? 'pressure' :
+                              label.toLowerCase().includes('quality') ? 'quality' :
+                              label.toLowerCase().includes('temperature') ? 'temperature' : '') && (
+                <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
+                  <div className="flex items-center space-x-1">
+                    <Battery className="w-3 h-3" />
+                    <span>{getLatestReading(label.toLowerCase().includes('flow') ? 'flow' : 
+                                          label.toLowerCase().includes('pressure') ? 'pressure' :
+                                          label.toLowerCase().includes('quality') ? 'quality' :
+                                          label.toLowerCase().includes('temperature') ? 'temperature' : '')?.battery_level || 0}%</span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <Wifi className="w-3 h-3" />
+                    <span>{getLatestReading(label.toLowerCase().includes('flow') ? 'flow' : 
+                                          label.toLowerCase().includes('pressure') ? 'pressure' :
+                                          label.toLowerCase().includes('quality') ? 'quality' :
+                                          label.toLowerCase().includes('temperature') ? 'temperature' : '')?.signal_strength || 0}%</span>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         ))}

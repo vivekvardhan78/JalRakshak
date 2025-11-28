@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { JalRakshakAPI, SensorReading, Complaint, Alert } from '../lib/supabase';
+import { JalRakshakAPI, SensorReading, Complaint, Alert, CameraService, GPSService } from '../lib/supabase';
 
 // Custom hook for real-time sensor data
 export function useSensorData() {
@@ -14,6 +14,7 @@ export function useSensorData() {
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -46,6 +47,7 @@ export function useSensorData() {
         });
         
         setSensorData(processedData);
+        setLastUpdate(new Date());
         setLoading(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to fetch sensor data');
@@ -59,22 +61,53 @@ export function useSensorData() {
     const subscription = JalRakshakAPI.subscribeTo('sensor_readings', (payload) => {
       if (payload.eventType === 'INSERT') {
         const newReading = payload.new as SensorReading;
-        setSensorData(prev => ({
-          ...prev,
-          [newReading.sensor_type === 'flow' ? 'waterFlow' : newReading.sensor_type]: newReading.value
-        }));
+        setSensorData(prev => {
+          const updated = { ...prev };
+          switch (newReading.sensor_type) {
+            case 'flow':
+              updated.waterFlow = newReading.value;
+              break;
+            case 'pressure':
+              updated.pressure = newReading.value;
+              break;
+            case 'quality':
+              updated.quality = newReading.value;
+              break;
+            case 'temperature':
+              updated.temperature = newReading.value;
+              break;
+            case 'ph':
+              updated.ph = newReading.value;
+              break;
+            case 'turbidity':
+              updated.turbidity = newReading.value;
+              break;
+          }
+          return updated;
+        });
+        setLastUpdate(new Date());
       }
     });
 
+    // Simulate real-time data updates every 30 seconds
+    const simulationInterval = setInterval(async () => {
+      try {
+        await JalRakshakAPI.simulateSensorData();
+      } catch (error) {
+        console.error('Failed to simulate sensor data:', error);
+      }
+    }, 30000);
+
     return () => {
       subscription.unsubscribe();
+      clearInterval(simulationInterval);
     };
   }, []);
 
-  return { sensorData, loading, error };
+  return { sensorData, loading, error, lastUpdate };
 }
 
-// Custom hook for complaints
+// Custom hook for complaints with photo support
 export function useComplaints() {
   const [complaints, setComplaints] = useState<Complaint[]>([]);
   const [loading, setLoading] = useState(true);
@@ -112,15 +145,41 @@ export function useComplaints() {
     };
   }, []);
 
-  const submitComplaint = async (complaintData: Omit<Complaint, 'id' | 'submitted_at'>) => {
+  const submitComplaint = async (
+    complaintData: Omit<Complaint, 'id' | 'submitted_at'>,
+    photos?: File[]
+  ) => {
     try {
-      await JalRakshakAPI.submitComplaint(complaintData);
+      await JalRakshakAPI.submitComplaint(complaintData, photos);
     } catch (err) {
       throw new Error(err instanceof Error ? err.message : 'Failed to submit complaint');
     }
   };
 
-  return { complaints, loading, error, submitComplaint };
+  const capturePhoto = async (): Promise<File> => {
+    try {
+      return await CameraService.capturePhoto();
+    } catch (err) {
+      throw new Error(err instanceof Error ? err.message : 'Failed to capture photo');
+    }
+  };
+
+  const getCurrentLocation = async (): Promise<{latitude: number, longitude: number, accuracy: number}> => {
+    try {
+      return await GPSService.getCurrentPosition();
+    } catch (err) {
+      throw new Error(err instanceof Error ? err.message : 'Failed to get location');
+    }
+  };
+
+  return { 
+    complaints, 
+    loading, 
+    error, 
+    submitComplaint, 
+    capturePhoto, 
+    getCurrentLocation 
+  };
 }
 
 // Custom hook for alerts
@@ -214,4 +273,53 @@ export function useAnalytics() {
   }, []);
 
   return { analytics, loading, error };
+}
+
+// Custom hook for real-time sensor monitoring
+export function useSensorMonitoring() {
+  const [sensorReadings, setSensorReadings] = useState<SensorReading[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchReadings = async () => {
+      try {
+        const data = await JalRakshakAPI.getLatestSensorReadings();
+        setSensorReadings(data);
+        setLoading(false);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to fetch sensor readings');
+        setLoading(false);
+      }
+    };
+
+    fetchReadings();
+
+    // Subscribe to real-time sensor updates
+    const subscription = JalRakshakAPI.subscribeTo('sensor_readings', (payload) => {
+      if (payload.eventType === 'INSERT') {
+        setSensorReadings(prev => [payload.new as SensorReading, ...prev.slice(0, 49)]);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const getSensorsByType = (type: string) => {
+    return sensorReadings.filter(reading => reading.sensor_type === type);
+  };
+
+  const getLatestReading = (sensorType: string) => {
+    return sensorReadings.find(reading => reading.sensor_type === sensorType);
+  };
+
+  return { 
+    sensorReadings, 
+    loading, 
+    error, 
+    getSensorsByType, 
+    getLatestReading 
+  };
 }
