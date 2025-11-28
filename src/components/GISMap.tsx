@@ -11,13 +11,14 @@ import {
   Layers,
   Navigation,
   MapPin,
-  Crosshair
+  Crosshair,
+  Satellite
 } from 'lucide-react';
 
 declare global {
   interface Window {
-    google: any;
-    initMap: () => void;
+    L: any;
+    bhuvanMap: any;
   }
 }
 
@@ -27,11 +28,13 @@ export function GISMap() {
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
   const [locationError, setLocationError] = useState<string | null>(null);
+  const [mapType, setMapType] = useState('satellite');
   const mapRef = useRef<HTMLDivElement>(null);
-  const googleMapRef = useRef<any>(null);
+  const leafletMapRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
+  const userMarkerRef = useRef<any>(null);
 
-  // Sample data points with real coordinates (you can replace with your actual data)
+  // Sample data points with real coordinates for Indian locations
   const mapPoints = [
     { id: 1, type: 'tank', lat: 23.2599, lng: 77.4126, name: 'Main Storage Tank', capacity: '5000L', status: 'normal', level: '85%' },
     { id: 2, type: 'pump', lat: 23.2589, lng: 77.4136, name: 'Solar Pump Station', power: '2kW', status: 'active', output: '420W' },
@@ -76,49 +79,37 @@ export function GISMap() {
     selectedLayer === 'issues' ? mapPoints.filter(p => p.type === 'leak' || p.status === 'warning') :
     mapPoints;
 
-  // Load Google Maps API
+  // Load Leaflet and Bhuvan API
   useEffect(() => {
-    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+    const apiKey = import.meta.env.VITE_BHUVAN_API_KEY;
     
-    if (!apiKey || apiKey === 'your-google-maps-api-key-here') {
-      setLocationError('Google Maps API key not configured. Please add VITE_GOOGLE_MAPS_API_KEY to your .env file.');
+    if (!apiKey || apiKey === 'your-bhuvan-api-key-here') {
+      setLocationError('Bhuvan API key not configured. Please add VITE_BHUVAN_API_KEY to your .env file.');
       return;
     }
 
-    // Check if Google Maps is already loaded
-    if (window.google && window.google.maps) {
-      setMapLoaded(true);
-      return;
-    }
+    // Load Leaflet CSS
+    const leafletCSS = document.createElement('link');
+    leafletCSS.rel = 'stylesheet';
+    leafletCSS.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    document.head.appendChild(leafletCSS);
 
-    // Create script element
-    const script = document.createElement('script');
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geometry`;
-    script.async = true;
-    script.defer = true;
-    
-    // Set up callback
-    window.initMap = () => {
+    // Load Leaflet JS
+    const leafletScript = document.createElement('script');
+    leafletScript.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    leafletScript.onload = () => {
       setMapLoaded(true);
     };
-    
-    script.onload = () => {
-      if (window.google && window.google.maps) {
-        setMapLoaded(true);
-      }
-    };
-    
-    script.onerror = () => {
-      setLocationError('Failed to load Google Maps API. Please check your API key and internet connection.');
+    leafletScript.onerror = () => {
+      setLocationError('Failed to load Leaflet mapping library. Please check your internet connection.');
     };
 
-    document.head.appendChild(script);
+    document.head.appendChild(leafletScript);
 
     return () => {
       // Cleanup
-      if (script.parentNode) {
-        script.parentNode.removeChild(script);
-      }
+      if (leafletCSS.parentNode) leafletCSS.parentNode.removeChild(leafletCSS);
+      if (leafletScript.parentNode) leafletScript.parentNode.removeChild(leafletScript);
     };
   }, []);
 
@@ -170,81 +161,88 @@ export function GISMap() {
     }
   }, [mapLoaded]);
 
-  // Initialize Google Map
+  // Initialize Bhuvan Map with Leaflet
   useEffect(() => {
-    if (!mapLoaded || !userLocation || !mapRef.current || !window.google) return;
+    if (!mapLoaded || !userLocation || !mapRef.current || !window.L) return;
 
-    // Initialize map
-    const map = new window.google.maps.Map(mapRef.current, {
-      center: userLocation,
+    // Initialize Leaflet map
+    const map = window.L.map(mapRef.current, {
+      center: [userLocation.lat, userLocation.lng],
       zoom: 15,
-      mapTypeId: 'hybrid',
-      styles: [
-        {
-          featureType: 'water',
-          elementType: 'geometry',
-          stylers: [{ color: '#193341' }]
-        },
-        {
-          featureType: 'landscape',
-          elementType: 'geometry',
-          stylers: [{ color: '#2c5234' }]
-        }
-      ]
+      zoomControl: true
     });
 
-    googleMapRef.current = map;
+    leafletMapRef.current = map;
+
+    // Bhuvan tile layers
+    const bhuvanLayers = {
+      satellite: window.L.tileLayer('https://bhuvan-vec1.nrsc.gov.in/bhuvan/gwc/service/wmts?layer=toposheet&tilematrixset=EPSG:3857&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image/png&TileMatrix=EPSG:3857:{z}&TileCol={x}&TileRow={y}', {
+        attribution: '© ISRO Bhuvan | JalRakshak',
+        maxZoom: 18
+      }),
+      hybrid: window.L.tileLayer('https://bhuvan-vec1.nrsc.gov.in/bhuvan/gwc/service/wmts?layer=india3&tilematrixset=EPSG:3857&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image/png&TileMatrix=EPSG:3857:{z}&TileCol={x}&TileRow={y}', {
+        attribution: '© ISRO Bhuvan | JalRakshak',
+        maxZoom: 18
+      }),
+      terrain: window.L.tileLayer('https://bhuvan-vec1.nrsc.gov.in/bhuvan/gwc/service/wmts?layer=terrain&tilematrixset=EPSG:3857&Service=WMTS&Request=GetTile&Version=1.0.0&Format=image/png&TileMatrix=EPSG:3857:{z}&TileCol={x}&TileRow={y}', {
+        attribution: '© ISRO Bhuvan | JalRakshak',
+        maxZoom: 18
+      })
+    };
+
+    // Add default layer
+    bhuvanLayers[mapType as keyof typeof bhuvanLayers].addTo(map);
 
     // Add user location marker
-    const userMarker = new window.google.maps.Marker({
-      position: userLocation,
-      map: map,
-      title: 'Your Location',
-      icon: {
-        path: window.google.maps.SymbolPath.CIRCLE,
-        scale: 8,
-        fillColor: '#4285f4',
-        fillOpacity: 1,
-        strokeColor: '#ffffff',
-        strokeWeight: 2
-      }
+    const userIcon = window.L.divIcon({
+      className: 'user-location-marker',
+      html: `<div style="
+        width: 20px; 
+        height: 20px; 
+        background: #4285f4; 
+        border: 3px solid white; 
+        border-radius: 50%; 
+        box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      "></div>`,
+      iconSize: [20, 20],
+      iconAnchor: [10, 10]
     });
 
-    // Add user location circle
-    const userCircle = new window.google.maps.Circle({
-      strokeColor: '#4285f4',
-      strokeOpacity: 0.8,
-      strokeWeight: 2,
+    userMarkerRef.current = window.L.marker([userLocation.lat, userLocation.lng], { icon: userIcon })
+      .addTo(map)
+      .bindPopup('Your Current Location');
+
+    // Add accuracy circle
+    window.L.circle([userLocation.lat, userLocation.lng], {
+      color: '#4285f4',
       fillColor: '#4285f4',
       fillOpacity: 0.1,
-      map: map,
-      center: userLocation,
-      radius: 100 // 100 meters
-    });
+      radius: 100
+    }).addTo(map);
 
     // Clear existing markers
-    markersRef.current.forEach(marker => marker.setMap(null));
+    markersRef.current.forEach(marker => map.removeLayer(marker));
     markersRef.current = [];
 
     // Add infrastructure markers
     filteredPoints.forEach((point) => {
-      const marker = new window.google.maps.Marker({
-        position: { lat: point.lat, lng: point.lng },
-        map: map,
-        title: point.name,
-        icon: {
-          path: window.google.maps.SymbolPath.CIRCLE,
-          scale: 10,
-          fillColor: getMarkerColor(point.type, point.status),
-          fillOpacity: 0.9,
-          strokeColor: '#ffffff',
-          strokeWeight: 2
-        }
+      const markerIcon = window.L.divIcon({
+        className: 'custom-marker',
+        html: `<div style="
+          width: 16px; 
+          height: 16px; 
+          background: ${getMarkerColor(point.type, point.status)}; 
+          border: 2px solid white; 
+          border-radius: 50%; 
+          box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        "></div>`,
+        iconSize: [16, 16],
+        iconAnchor: [8, 8]
       });
 
-      // Add info window
-      const infoWindow = new window.google.maps.InfoWindow({
-        content: `
+      const marker = window.L.marker([point.lat, point.lng], { icon: markerIcon })
+        .addTo(map)
+        .bindPopup(`
           <div style="padding: 8px; min-width: 200px;">
             <h3 style="margin: 0 0 8px 0; color: #1f2937; font-size: 14px; font-weight: 600;">${point.name}</h3>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 12px;">
@@ -258,35 +256,26 @@ export function GISMap() {
                 `).join('')}
             </div>
           </div>
-        `
-      });
+        `);
 
-      marker.addListener('click', () => {
-        // Close other info windows
-        markersRef.current.forEach(m => {
-          if (m.infoWindow) m.infoWindow.close();
-        });
-        
-        infoWindow.open(map, marker);
+      marker.on('click', () => {
         setSelectedPoint(point);
       });
 
-      marker.infoWindow = infoWindow;
       markersRef.current.push(marker);
     });
 
     return () => {
-      // Cleanup markers
-      markersRef.current.forEach(marker => marker.setMap(null));
-      userMarker.setMap(null);
-      userCircle.setMap(null);
+      // Cleanup
+      if (map) {
+        map.remove();
+      }
     };
-  }, [mapLoaded, userLocation, filteredPoints]);
+  }, [mapLoaded, userLocation, filteredPoints, mapType]);
 
   const centerOnUserLocation = () => {
-    if (googleMapRef.current && userLocation) {
-      googleMapRef.current.setCenter(userLocation);
-      googleMapRef.current.setZoom(16);
+    if (leafletMapRef.current && userLocation) {
+      leafletMapRef.current.setView([userLocation.lat, userLocation.lng], 16);
     }
   };
 
@@ -301,8 +290,8 @@ export function GISMap() {
           setUserLocation(location);
           setLocationError(null);
           
-          if (googleMapRef.current) {
-            googleMapRef.current.setCenter(location);
+          if (leafletMapRef.current) {
+            leafletMapRef.current.setView([location.lat, location.lng], 16);
           }
         },
         (error) => {
@@ -312,6 +301,10 @@ export function GISMap() {
     }
   };
 
+  const changeMapType = (newMapType: string) => {
+    setMapType(newMapType);
+  };
+
   return (
     <div className="bg-white rounded-xl shadow-lg overflow-hidden">
       {/* Header */}
@@ -319,10 +312,10 @@ export function GISMap() {
         <div className="flex items-center justify-between">
           <div>
             <h2 className="text-xl font-bold flex items-center">
-              <Map className="w-5 h-5 mr-2" />
-              GIS Water Network Map
+              <Satellite className="w-5 h-5 mr-2" />
+              Bhuvan GIS Water Network Map
             </h2>
-            <p className="text-sm opacity-90">Real-time Infrastructure Mapping</p>
+            <p className="text-sm opacity-90">ISRO Satellite Mapping - Real-time Infrastructure</p>
           </div>
           <div className="flex items-center space-x-2">
             {userLocation && (
@@ -390,6 +383,30 @@ export function GISMap() {
             ))}
           </div>
 
+          {/* Map Type Controls */}
+          <div className="mt-6">
+            <h4 className="font-medium text-gray-900 mb-2">Map Type</h4>
+            <div className="space-y-1">
+              {[
+                { id: 'satellite', name: 'Satellite' },
+                { id: 'hybrid', name: 'Hybrid' },
+                { id: 'terrain', name: 'Terrain' }
+              ].map((type) => (
+                <button
+                  key={type.id}
+                  onClick={() => changeMapType(type.id)}
+                  className={`w-full text-left p-2 rounded text-sm transition-colors ${
+                    mapType === type.id
+                      ? 'bg-blue-100 text-blue-700'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  {type.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Location Info */}
           {userLocation && (
             <div className="mt-6 p-3 bg-blue-50 rounded-lg">
@@ -430,7 +447,7 @@ export function GISMap() {
             <div className="h-96 bg-gray-100 flex items-center justify-center">
               <div className="text-center">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600 mx-auto mb-2"></div>
-                <p className="text-gray-600">Loading Google Maps...</p>
+                <p className="text-gray-600">Loading Bhuvan Maps...</p>
               </div>
             </div>
           ) : (
